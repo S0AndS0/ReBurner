@@ -1,0 +1,268 @@
+
+[SPOILER='Current methods of burning data to the Bitcoin Blockchain']
+http://www.righto.com/2014/02/ascii-bernanke-wikileaks-photographs.html
+[/SPOILER]
+[SPOILER='Bash cheet-sheet for new method']
+Compress and Encrypt a file or directory with a password
+tar c <fileORdir> | opensssl enc -aes-256-cbc -e > secrit.tar.enc
+Decrypt and Un-compress password protected file
+openssl enc -aes-256-cbc -d < secrit.tar.enc | tar x
+
+Dump file's hex value and add carige return after 64 charitars
+[CODE]
+hexdump -v -e '/1 "%02X"' secrit.tar.enc | sed 's/.\{64\}/&\n/g'
+[/CODE]
+Convert each hex line to sha256sum values
+[CODE]
+hexdump -v -e '/1 "%02X"' secrit.tar.enc | sed 's/.\{64\}/&\n/g' | while read x ; do echo -n "$x" | sha256sum ; done | sed 's/  -//g'
+[/CODE]
+Where we to use the Brain wallet calculator to convert things then the above hexdump would take the place of the brainwallet_exponent function and the read -r passphrase would no longer be nessisary
+[CODE]
+#!/bin/bash
+# $1 is set by running this script with a file declaired
+# ./reburner.sh <fileName>
+# Original author of one liners was found at http://www.commandlinefu.com/commands/by/nixnax
+# Be sure to thank them
+fileTo_beReburned="$1"
+function b58encode () { local b58_lookup_table=({1..9} {A..H} {J..N} {P..Z} {a..k} {m..z}); bc<<<"obase=58;ibase=16;${1^^}"|(read -a s; for b58_index in "${s[@]}" ; do printf %s ${b58_lookup_table[ 10#"$b58_index" ]}; done); }
+
+function wallet_exponent () { hexdump -v -e '/1 "%02X"' $fileTo_beReburned | sed 's/.\{64\}/&\n/g' | while read x ; do echo -n "$x" | sha256sum ; done | sed 's/  -//g' ; }
+function wallet_checksum () { hexdump -v -e '/1 "%02X"' $fileTo_beReburned | sed 's/.\{64\}/&\n/g' | while read x ; do echo -n "$x" | sha256sum ; done | sed 's/  -//g' | sed 's/^/x80/' | $o ) | $o | sha256sum|cut -b1-8 ); }
+#	o='openssl sha256 -binary'; 
+#	p='printf';
+#	(
+#		$p %b "\x80";$p %s "$@"|$o
+#		)|$o|sha256sum|cut -b1-8
+#	); }
+#	# %b = Print the associated argument while interpreting backslash escapes in there
+#	# %s = Print the associated argument as unsigned hexadecimal number with lower-case hex-digits (a-f)
+
+# bellow command neads to be wrapped in a looping expression like above.
+#(b58encode 80$( wallet_exponent "" )$( wallet_checksum "" ))
+
+[/CODE]
+
+Convert hexdump back into ascii charictars
+	Note the | (pipe) option works fine too but is mot default with Busybox Andoid
+	Also revercing the hex on an encrypted file without specifying an output will have disastrus effects on your terminal.
+[CODE]
+xxd -r -p <hexdumpedFile>
+[/CODE]
+
+[/SPOILER]
+	To sum it up, current methods, burn to a [b]public[/b] address that is known but do to the nature that public addresses are calculated the privet address will remain unknown and the coins burned there will rot for eturnaty.
+	
+	I say this is dirty and waistfull, effective it maybe, there has got to be a better way.
+
+__# Perposed life cycle of data being burned such that the funds being used can be recovered.
+1. GPG Key pare is generated; public key is used for encypting data for public use, privet key is used to encrypt data only for your eyes.
+2. Both keys are then converted into Bitcoin [b]Privet[/b] keys. These are used as "control addresses" (their signatures change as they should)
+3. Data file is encrypted using one of the above Privet Bitcoin keys and then compressed.
+4. This encrypted and compressed data is then chopped into a list of new Bitcoin [b]privet[/b] keys. These will be called "data Addresses" for now.
+5. These privet keys that represent the data next have thier public addresses calculated.
+6. From there a transaction is sent involving all those public addresses, in order, that thier privat keys are related to the data string.
+	or from the source address each public address is paid in order that thier privat keys relate to the data in a bulk transaction from that one source.
+7. In both cases the remaining coins (those that where not spent on "Miner's Fees") are deposited back to a singular wallet for latter use by that holder.
+	in the case of a bulk send and trickle back option, the end address should be one that can make use of "Bitcoin Dust"
+8. Because the data being encrypted is being converted to hedidecimel format it makes the entropy highenough that these addresses can be used a few times; that's all we'll need ;-D before there's a risk of funds being stollen.
+9. To [i]expose[/i] the fact that data is there, such as if we wanted to host a website's content out of the blockchain, we'll use the exploit that's already been posted on how privet keys can be recovered from public transactions by not generating a random set of bits in the signing algorithum. 
+	By useing this in combination with multi-privet key signing to keep the "control addresses" privet but allow the "data Addresses" to become exposed
+for example data address 1, data address 2, and data address 3 are multi-signed to one another.
+	data address 1 signes a transaction to data address 2 not using the proper signing randomness, data address 2 conferms with it's own malformed signature and recives
+	data address 2 then signes a transaction to data address 3, data address 1 and 2 repeat thier [i]bad[/i] signing behavior and dump everything from both into data address 3
+	This repeats in sequence, reviealing privet keys to hackers on thier last transaction, and simultainasly dumping funds into the next temperaraly secrit key's control.
+	Based on the gpg key used to encrypt the file this data can be shaired publicly, within small groupes, or compleatly privet
+10. if being shaired publicly these files should be uploaded as seperat sets of addresses and special "fee" signatures left in the form of ascii (litiraly) to hex to ascii values. 
+	Lets say the above example relates to one directory with one file and one (curently unfilled) directory. Burning would pay fees like so
+		data address 1 = dir1 to ascii variable "D0" > fee modifier "208" signed to address 2 and chainge to self then remaineder to address 3
+		data address 2 = file1 to ascii variable "F0" > fee modifire "240" signed to address 3 and chainge to self then remaineder to address 3
+		data address 3 = Dir2 to ascii varible "D00" > fee modifire "2080" ...
+	These are ordered such that a directory is fully populated by files before writing the next directory in that tree
+	Where it more populated with a file in "D00" it would be called "F01" and a sub directory would be "D01" if in "D00" but "D1" if under "D0"
+11. if being shaired privetly or among a groupe the signing of coins can be structrued such that they are [i]secure[/i] up till the last transaction, like a zipper, but such that they're co-related in a way that one of your control keys can be used to decrypt the [i]bad[/b] signing.
+	or if true security is requrired the signing of data can be made [b]corect[/b] and the maping of transactions radomized before sumittion; this mapping and the user's wallet WIPs would then be the only way to reconstruct and decrypt the original data.
+12. On a webhost a set of scripts will be written to read data from the blockchain using the "zipper" method to reparce the real website's content from the blockchain.
+	This will be encrypted with a privet gpg key so that the public key can be used to decrypt the data, though in this case the public key will only be known to the webserver ;-)
+	An example follows;
+		read transactions 1-11, convert to D0, and variable file table list
+		read transactions 12-278, convert from F0 to index.php
+		read transactions 279-384, convert from F1 to style.css
+		read transactions 385-n, convert sumchecks, look for revoke signatue and look for updates
+		if no updates, serve content to authorized IP
+		else update check for revoke signature if no revoke signature found contiue checking for updates and serve them up.
+		on serve
+			if revoke check passed the first time the index.php will be hardcoded to duble check and if it fails will atempt to kill the connection.
+			if revoke check passes both times then it checks for valid connection authetication and if passing that decrypts the remainder of the files.
+			if authetication fails then it'll be hard coded to kill the connection.
+			if all pass then the site will load displaying the scripts used to encode it to the blockchain and the source code for hosting a site this way.
+
+
+# source code that maybe helpful
+	Generate Bitcoin addresses localy
+https://github.com/grondilu/bitcoin-bash-tools/blob/master/bitcoin.sh
+	Generate Bitcoin addresses using webservice
+http://lenschulwitz.com/b58/base58perl.txt
+https://github.com/pointbiz/bitaddress.org
+	Generate custom public addresses (brute fource)
+https://en.bitcoin.it/wiki/Vanitygen
+	File handling in PHP
+https://www.adayinthelifeof.nl/2010/01/14/handling-binary-data-in-php-with-pack-and-unpack/
+	http://stackoverflow.com/questions/7651928/php-read-binary-file-in-real-binary
+http://www.binarytides.com/how-to-create-tar-archives-in-php/
+
+	File handling in CMI
+http://www.commandlinefu.com/commands/view/11584/encrypted-archive-with-openssl-and-tar
+
+	encryption options
+http://askubuntu.com/questions/332020/how-do-i-import-a-private-key-into-gpg-so-that-it-becomes-the-default-key
+
+	List of file format headers for TAR and others
+http://www.garykessler.net/library/file_sigs.html
+	For TAR
+42 5A 68 	  	BZh
+BZ2, TAR.BZ2, TBZ2, TB2 	  	bzip2 compressed archive
+
+1F 9D 	  	..
+TAR.Z 	  	Compressed tape archive file using standard (Lempel-Ziv-Welch) compression
+
+1F A0 	  	. 
+TAR.Z 	  	Compressed tape archive file using LZH (Lempel-Ziv-Huffman) compression
+
+
+
+[quote='http://chimera.labs.oreilly.com/books/1234000001802/ch04.html#base58']
+Table 4-1. Base58Check version prefix and encoded result examples
+Type 					Version prefix (hex) 	Base58 result prefix
+
+Bitcoin Address	
+						0x00			1
+
+Pay-to-Script-Hash Address
+						0x05			3
+
+Bitcoin Testnet Address
+						0x6F			m or n
+
+Private Key WIF
+						0x80			5, K or L
+
+BIP38 Encrypted Private Key
+						0x0142			6P
+
+BIP32 Extended Public Key
+						0x0488B21E		xpub
+..........
+Table 4-2. Private key representations (encoding formats)
+Type 			Prefix 	Description
+
+Hex				None	64 hexadecimal digits
+
+WIF				5		Base58Check encoding: Base58 with version prefix of 128 and 32-bit checksum
+
+WIF-compressed	K or L	As above, with added suffix 0x01 before encoding
+[/quote]
+
+[quote='http://www.righto.com/2014/02/bitcoins-hard-way-using-raw-bitcoin.html']
+Python script to generate privet keys from hex and calculate the WIF and public address.
+Source : https://gist.github.com/shirriff/8e6b5650361bbe78a055#file-keyutils-py
+Note :-: depends on externel sources : https://github.com/gferrin/bitcoin-code/blob/master/keyUtils.py
+	If getting :-:	NameError: name 'keyUtils" is not defined.
+[code]
+def privateKeyToWif(key_hex):
+return utils.base58CheckEncode(0x80, key_hex.decode('hex'))
+def privateKeyToPublicKey(s):
+sk = ecdsa.SigningKey.from_string(s.decode('hex'), curve=ecdsa.SECP256k1)
+vk = sk.verifying_key
+return ('\04' + sk.verifying_key.to_string()).encode('hex')
+def pubKeyToAddr(s):
+ripemd160 = hashlib.new('ripemd160')
+ripemd160.update(hashlib.sha256(s.decode('hex')).digest())
+return utils.base58CheckEncode(0, ripemd160.digest())
+ 
+def keyToAddr(s):
+return pubKeyToAddr(privateKeyToPublicKey(s))
+ 
+# Warning: this random function is not cryptographically strong and is just for example
+private_key = ''.join(['%x' % random.randrange(16) for x in range(0, 64)])
+print keyUtils.privateKeyToWif(private_key)
+print keyUtils.keyToAddr(private_key)
+[/code]
+
+[/quote]
+
+
+
+
+
+
+[quote='nixnax']
+	(read -r passphrase; b58encode 80$( brainwallet_exponent "$passphrase" )$( brainwallet_checksum "$passphrase" ))
+Bitcoin Brainwallet Private Key Calculator
+A bitcoin "brainwallet" is a secret passphrase you carry in the "wallet" of your brain.
+The Bitcoin Brainwallet Private Key Calculator calculates the standard base58 encoded bitcoin private key from your "brainwallet" passphrase.
+
+The private key is the most important bitcoin number. All other numbers can be derived from it.
+This command uses 3 other functions - all 3 are defined on my user page:
+1) brainwallet_exponent() - search for Bitcoin Brainwallet Exponent Calculator
+2) brainwallet_checksum() - search for Bitcoin Brainwallet Exponent Calculator
+3) b58encode() - search for Bitcoin Brainwallet Base58 Encoder
+Do make sure you use really strong, unpredictable passphrases (30+ characters)!
+http:brainwallet.org can be used to check the accuracy of this calculator.
+
+	function b58encode () { local b58_lookup_table=({1..9} {A..H} {J..N} {P..Z} {a..k} {m..z}); bc<<<"obase=58;ibase=16;${1^^}"|(read -a s; for b58_index in "${s[@]}" ; do printf %s ${b58_lookup_table[ 10#"$b58_index" ]}; done); }
+Bitcoin Brainwallet Base58 Encoder
+A bitcoin "brainwallet" is a secret passphrase you carry in your brain.
+The Bitcoin Brainwallet Private Key Base58 Encoder is the third of three functions needed to calculate a bitcoin PRIVATE key from your "brainwallet" passphrase.
+This base58 encoder uses the obase parameter of the amazing bc utility to convert from ASCII-hex to base58. Tech note: bc inserts line continuation backslashes, but the "read s" command automatically strips them out.
+I hope that one day base58 will, like base64, be added to the amazing openssl utility.
+
+	function brainwallet_checksum () { (o='openssl sha256 -binary'; p='printf';($p %b "\x80";$p %s "$1"|$o)|$o|sha256sum|cut -b1-8); }
+Bitcoin Brainwallet Checksum Calculator
+A bitcoin "brainwallet" is a secret passphrase you carry in your brain.
+The Bitcoin Brainwallet Exponent Calculator is the second of three functions needed to calculate a bitcoin PRIVATE key. Roughly, checksum is the first 8 hex digits of sha256(sha256(0x80+sha256(passphrase)))
+Note that this is a bash function, which means you have to type its name to invoke it
+
+	function brainwallet_exponent () { printf %s "$1"|sha256sum|head -c 64; }
+Bitcoin Brainwallet Exponent Calculator
+A bitcoin "brainwallet" is a secret passphrase you carry in your brain.
+The Bitcoin Brainwallet Exponent Calculator is one of three functions needed to calculate the bitcoin PRIVATE key. Roughly, the formula is exponent = sha256 (passphrase)
+Note that this is a bash function, which means you have to type its name to invoke it.
+
+You can check the accuracy of the results here http://brainwallet.org
+[/quote]
+	Notes about the above code :-: Looks like in "brainwallet_exponet" the printf %s "$1" is where the $passphrase variable is passed from the main command "read -r passphrase"
+		then the "brainwallet_exponet" function does a sha256sum and trims off anything longer then 64 charictars using the "head -c 64" command.
+		this generating of sha256 is still required for generating a privet address but for this perpiose
+
+
+
+[SPOILER='Code examples']
+Convert "5a" hexnumber to decimal
+[CODE]
+	echo -n 5a | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf
+[/CODE]
+	Found code sample at :-: http://stackoverflow.com/questions/1604765/linux-shell-scripting-hex-string-to-bytes
+	More can be found at :-: http://www.linuxnix.com/2012/05/convert-binaryhex-oct-decimal-linuxunix.html
+
+Remove empty spaces if errored was encountered
+[CODE]
+	sed -e "s/\s\{3,\}/ /g" inputFile
+[/CODE]
+	Found code sample at :-: http://superuser.com/questions/112834/how-to-match-whitespace-in-sed
+
+Convert file to hexnumber
+[CODE]
+	hexdump -x <someFile>
+[/CODE]
+	Found code sample at :-: http://stackoverflow.com/questions/2003803/show-hexadecimal-numbers-of-a-file/2004276#2004276
+	More can be found at :-: http://mylinuxbook.com/hexdump/
+	and for sed command  :-: http://unix.stackexchange.com/questions/5980/how-do-i-insert-a-space-every-four-characters-in-a-long-line
+	[b]Hexdump a file in bite order and insert new line after 4 digits[/b]
+	[CODE]
+	hexdump -v -e '/1 "%02X"' test.txt | sed 's/.\{4\}/&\n/g'
+	[/CODE]
+
+
+[/SPOILER]
+
+
